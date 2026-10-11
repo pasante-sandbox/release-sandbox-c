@@ -1,0 +1,10 @@
+# Release policy, read by the release control service at the commit being deployed.
+# app: defaults to the repository name.
+owner: sandbox
+
+environments:
+  stg:
+    approvals: 0
+  prod:
+    approvals: 1
+    production: true

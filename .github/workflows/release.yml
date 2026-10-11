@@ -1,0 +1,60 @@
+# Release sandbox workflow.
+# ci runs on GitHub's runners for every pull request and push. The deploy jobs run only for main, on the self-hosted
+# runner on the sandbox PC, and each waits for its environment's protection rules: the release control
+# GitHub App (both environments) and, for prod, a required reviewer.
+name: release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: build-test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build --build-arg COMMIT=${{ github.sha }} --build-arg ENVIRONMENT=ci -t release-sandbox-b:ci .
+
+      - name: Smoke test
+        run: |
+          docker run -d --name smoke -p 8080:80 release-sandbox-b:ci
+          sleep 2
+          curl --fail --silent http://localhost:8080/ | grep -q "${{ github.sha }}"
+
+  deploy-stg:
+    # Never for pull requests: a fork must not reach the self-hosted runner.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: ci
+    runs-on: [self-hosted, sandbox]
+    environment:
+      name: stg
+      url: http://localhost:8091
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to stg
+        shell: pwsh
+        run: ./deploy/Deploy-Sandbox.ps1 -Environment stg -Commit ${{ github.sha }}
+
+  deploy-prod:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: deploy-stg
+    runs-on: [self-hosted, sandbox]
+    environment:
+      name: prod
+      url: http://localhost:8092
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to prod
+        shell: pwsh
+        run: ./deploy/Deploy-Sandbox.ps1 -Environment prod -Commit ${{ github.sha }}

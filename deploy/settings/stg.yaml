@@ -1,0 +1,4 @@
+settings:
+  Greeting:Text: Hello from stg
+secrets:
+  Demo:ApiKey: asendia/release-sandbox-b/stg/demo-key

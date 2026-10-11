@@ -1,0 +1,4 @@
+settings:
+  Greeting:Text: Hello from prod
+secrets:
+  Demo:ApiKey: asendia/release-sandbox-b/prod/demo-key
