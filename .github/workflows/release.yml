@@ -1,7 +1,7 @@
-# Release sandbox workflow.
-# ci runs on GitHub's runners for every pull request and push. The deploy jobs run only for main, on the self-hosted
-# runner on the sandbox PC, and each waits for its environment's protection rules: the release control
-# GitHub App (both environments) and, for prod, a required reviewer.
+# Release sandbox workflow (portal flow).
+# ci runs for every pull request and push. On main, stg deploys after Release Control's checks; preprod after a tester
+# approves it in the Ops Platform; prod after the tester approves it there too and the developer releases it.
+# The deploy jobs run on GitHub's runners and only record the deploy: this sandbox exists to test the release flow.
 name: release
 
 on:
@@ -24,37 +24,34 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build the image
-        run: docker build --build-arg COMMIT=${{ github.sha }} --build-arg ENVIRONMENT=ci -t release-sandbox-b:ci .
+        run: docker build --build-arg COMMIT=${{ github.sha }} --build-arg ENVIRONMENT=ci -t release-sandbox:ci .
 
       - name: Smoke test
         run: |
-          docker run -d --name smoke -p 8080:80 release-sandbox-b:ci
+          docker run -d --name smoke -p 8080:80 release-sandbox:ci
           sleep 2
           curl --fail --silent http://localhost:8080/ | grep -q "${{ github.sha }}"
 
   deploy-stg:
-    # Never for pull requests: a fork must not reach the self-hosted runner.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: ci
-    runs-on: [self-hosted, sandbox]
-    environment:
-      name: stg
-      url: http://localhost:8091
+    runs-on: ubuntu-24.04
+    environment: stg
     steps:
-      - uses: actions/checkout@v4
-      - name: Deploy to stg
-        shell: pwsh
-        run: ./deploy/Deploy-Sandbox.ps1 -Environment stg -Commit ${{ github.sha }}
+      - run: echo "Deployed ${GITHUB_SHA} to stg."
+
+  deploy-preprod:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: deploy-stg
+    runs-on: ubuntu-24.04
+    environment: preprod
+    steps:
+      - run: echo "Deployed ${GITHUB_SHA} to preprod."
 
   deploy-prod:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: deploy-stg
-    runs-on: [self-hosted, sandbox]
-    environment:
-      name: prod
-      url: http://localhost:8092
+    needs: deploy-preprod
+    runs-on: ubuntu-24.04
+    environment: prod
     steps:
-      - uses: actions/checkout@v4
-      - name: Deploy to prod
-        shell: pwsh
-        run: ./deploy/Deploy-Sandbox.ps1 -Environment prod -Commit ${{ github.sha }}
+      - run: echo "Deployed ${GITHUB_SHA} to prod."
