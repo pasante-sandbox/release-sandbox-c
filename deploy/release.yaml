@@ -5,6 +5,9 @@ owner: sandbox
 environments:
   stg:
     approvals: 0
+  preprod:
+    approvals: 1          # the tester, in the Ops Platform, after testing on stg
   prod:
-    approvals: 1
+    approvals: 1          # the same tester, after testing in preprod
     production: true
+    manualRelease: true   # then the developer is told, and releases it in the Ops Platform
