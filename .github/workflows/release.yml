@@ -1,7 +1,8 @@
 # Release sandbox workflow (portal flow).
 # ci runs for every pull request and push. On main, stg deploys after Release Control's checks; preprod after a tester
 # approves it in the Ops Platform; prod after the tester approves it there too and the developer releases it.
-# The deploy jobs run on GitHub's runners and only record the deploy: this sandbox exists to test the release flow.
+# The deploy jobs run on GitHub's runners, sign in to AWS with their environment's own role (OIDC, no stored keys)
+# and record the deploy: this sandbox exists to test the release flow. vars.AWS_DEPLOY_ROLE_ARN is set per environment.
 name: release
 
 on:
@@ -37,21 +38,52 @@ jobs:
     needs: ci
     runs-on: ubuntu-24.04
     environment: stg
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - run: echo "Deployed ${GITHUB_SHA} to stg."
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-north-1
+      - name: Deploy
+        # Prints only the role name, never the account number (the repository is public).
+        run: |
+          role=$(aws sts get-caller-identity --query Arn --output text | cut -d/ -f2)
+          echo "Deployed ${GITHUB_SHA} to stg as ${role}."
 
   deploy-preprod:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: deploy-stg
     runs-on: ubuntu-24.04
     environment: preprod
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - run: echo "Deployed ${GITHUB_SHA} to preprod."
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-north-1
+      - name: Deploy
+        run: |
+          role=$(aws sts get-caller-identity --query Arn --output text | cut -d/ -f2)
+          echo "Deployed ${GITHUB_SHA} to preprod as ${role}."
 
   deploy-prod:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: deploy-preprod
     runs-on: ubuntu-24.04
     environment: prod
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - run: echo "Deployed ${GITHUB_SHA} to prod."
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-north-1
+      - name: Deploy
+        run: |
+          role=$(aws sts get-caller-identity --query Arn --output text | cut -d/ -f2)
+          echo "Deployed ${GITHUB_SHA} to prod as ${role}."
